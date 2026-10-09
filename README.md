@@ -46,18 +46,6 @@ Then open the URL it prints.
 **Use a desktop-width window** — the 3D canvas and the scrollytelling layout only
 render at the `lg` breakpoint and above.
 
-## Deploying
-
-The site is a static build, served from the `docs/` folder via GitHub Pages.
-
-```bash
-npm run build   # outputs to build/
-make github     # copies build/ into docs/, then commits and pushes
-```
-
-Asset paths are relative, so the build works from a project subpath without any
-extra configuration.
-
 ## Credits
 
 - **[Yi Zhe Ang](https://yizhe-ang.github.io/)** — original article, design and
