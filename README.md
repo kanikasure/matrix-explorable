@@ -2,6 +2,8 @@
 
 A Visual Explorable of Matrices and Linear Transformations.
 
+**Live version:** https://kanikasure.github.io/matrix-explorable/
+
 > **This is a fork.** The original explainer was created by
 > **[Yi Zhe Ang](https://yizhe-ang.github.io/)** and lives at
 > **[yizhe-ang/matrix-explorable](https://github.com/yizhe-ang/matrix-explorable)**
