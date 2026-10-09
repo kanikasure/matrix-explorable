@@ -1,5 +1,6 @@
 <script>
 	import NumberSpinner from "svelte-number-spinner";
+	import katex from "katex";
 	import {
 		endMatrix,
 		show3d,
@@ -7,7 +8,7 @@
 		inputVectorToggled
 	} from "$stores";
 	import { Matrix } from "ml-matrix";
-	import { colorVector } from "$data/variables";
+	import { colorVector, colorAreaNew, colorAreaZero } from "$data/variables";
 	import { fly } from "svelte/transition";
 
 	const transitionProps = { duration: 200, x: -30 };
@@ -55,12 +56,36 @@
 			outputVector = [b.get(0, 0), b.get(1, 0)];
 		}
 	}
+
+	// In 2D this is the factor the unit area is scaled by; in 3D, the volume
+	$: det = $show3d
+		? $endMatrix[0] *
+				($endMatrix[5] * $endMatrix[10] - $endMatrix[6] * $endMatrix[9]) -
+			$endMatrix[1] *
+				($endMatrix[4] * $endMatrix[10] - $endMatrix[6] * $endMatrix[8]) +
+			$endMatrix[2] *
+				($endMatrix[4] * $endMatrix[9] - $endMatrix[5] * $endMatrix[8])
+		: $endMatrix[0] * $endMatrix[5] - $endMatrix[1] * $endMatrix[4];
+	// Matches the shaded region, which turns this colour once space collapses
+	$: singular = Math.abs(det) < 0.08;
+	$: detColor = singular ? colorAreaZero : colorAreaNew;
+
+	// A^-1 = (1/det) [d -b; -c a]. Undefined the instant det reaches 0.
+	$: inverse2d = singular
+		? null
+		: [
+				$endMatrix[5] / det,
+				-$endMatrix[1] / det,
+				-$endMatrix[4] / det,
+				$endMatrix[0] / det
+			];
 </script>
 
 <div class="flex gap-5 items-center pointer-events-auto">
 	<!-- Matrix -->
-	<div class="shadow-lg shadow-neutral-content/20">
-		{#if $show3d}
+	<div class="flex flex-col gap-2">
+		<div class="shadow-lg shadow-neutral-content/20">
+			{#if $show3d}
 			<div
 				class="container font-serif grid grid-cols-3 grid-rows-3 px-3 bg-base-200"
 			>
@@ -95,6 +120,42 @@
 						/>
 					</div>
 				{/each}
+			</div>
+		{/if}
+		</div>
+
+		<!-- Determinant: the factor the unit area (or volume) is scaled by -->
+		<div class="font-serif text-2xl whitespace-nowrap">
+			<span class="opacity-60">det =</span>
+			<span style:color={detColor}>{det.toFixed(1)}</span>
+		</div>
+
+		{#if !$show3d}
+			<!-- The inverse, which stops existing the moment det hits 0 -->
+			<div class="font-serif whitespace-nowrap">
+				<div class="text-sm opacity-60 mb-1">
+					{@html katex.renderToString("A^{-1}")}
+				</div>
+				{#if inverse2d}
+					<div
+						class="inverse grid grid-cols-2 grid-rows-2 px-2 py-1 bg-base-200"
+						style:box-shadow="inset 0px 0px 0px 2px {colorAreaNew}"
+					>
+						{#each inverse2d as n}
+							<div class="w-14 px-1 py-0.5 text-right text-lg">
+								{Number(n.toFixed(2))}
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<div
+						class="px-2 py-2 text-lg bg-base-200"
+						style:color={colorAreaZero}
+						style:box-shadow="inset 0px 0px 0px 2px {colorAreaZero}"
+					>
+						no inverse
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>

@@ -1,19 +1,23 @@
 <script>
-	export let title = "The Matrix Arcade";
-	export let description = "A Visual Explorable of Matrices and Linear Transformations";
-	export let url = "https://yizhe-ang.github.io/matrix-explorable/";
-	export let keywords = "matrix, vector, multiplication, linear, transformation, visual, explorable, explainer, math, linear algebra, interactive, visualization, tutorial, intuition";
-  export let socialImg = "https://yizhe-ang.github.io/matrix-explorable/social.png"
+	export let title = "The Matrix Arcade — extended";
+	export let description =
+		"A Visual Explorable of Matrices and Linear Transformations, by Yi Zhe Ang. This extended version adds sections on vectors, the determinant and the matrix inverse.";
+	// This fork's own address. Pointing canonical at the original would tell
+	// search engines that this page *is* that page.
+	export let url = "https://kanikasure.github.io/matrix-explorable";
+	export let keywords = "matrix, vector, multiplication, linear, transformation, determinant, inverse, visual, explorable, explainer, math, linear algebra, interactive, visualization, tutorial, intuition";
+  export let socialImg = "https://kanikasure.github.io/matrix-explorable/social.png"
 </script>
 
 <svelte:head>
 	<title>{title}</title>
 	<meta name="description" content={description} />
 	<meta name="author" content="Yi Zhe Ang" />
+	<meta name="contributor" content="Kanika" />
 	<meta name="news_keywords" content={keywords} />
 
 	<meta property="og:title" content={title} />
-	<meta property="og:site_name" content="Yi Zhe Ang" />
+	<meta property="og:site_name" content="The Matrix Arcade (extended fork)" />
 	<meta property="og:url" content={url} />
 	<meta property="og:description" content={description} />
 	<meta property="og:type" content="article" />
@@ -26,6 +30,7 @@
 
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:site" content="https://yizhe-ang.github.io/" />
+	<!-- Credits the original author, not this fork -->
 	<meta name="twitter:creator" content="@yizhe_ang" />
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />

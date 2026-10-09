@@ -43,7 +43,10 @@
 		cameraProps,
 		cameraControls,
 		playgroundSt,
-		vectorCoordsInput
+		vectorCoordsInput,
+		introVectorAngleDeg,
+		introVectorLength,
+		scalarDemoValue
 	} from "$stores";
 	import {
 		colorVector,
@@ -62,6 +65,23 @@
 		eg3dOutputVector,
 		egEndMatrix,
 		initMatrix,
+		scalarDemoVector,
+		addVectorA,
+		addVectorB,
+		addVectorSum,
+		colorAddA,
+		colorAddB,
+		colorAreaOld,
+		colorAreaNew,
+		colorAreaZero,
+		negDetMatrixX,
+		negDetMatrixY,
+		negDetEndMatrix,
+		zeroDetMatrixX,
+		zeroDetMatrixY,
+		zeroDetEndMatrix,
+		singularP,
+		singularQ,
 		colorGrid,
 		colorGridAlt
 	} from "$data/variables";
@@ -78,6 +98,8 @@
 	import { spring } from "svelte/motion";
 	import { base, assets } from "$app/paths";
 	import Vectors from "./Vectors.svelte";
+	import UnitArea from "./UnitArea.svelte";
+	import UnitCube from "./UnitCube.svelte";
 
 	export let mathbox;
 
@@ -482,6 +504,192 @@
 	let yCoords = [0, 0, 0, 0, 0, 0];
 	let zCoords = [0, 0, 0, 0, 0, 0];
 
+	// Lets the direction/length scrubbers drive the example vector once its
+	// scroll-triggered "grow-in" animation (trigger "#st-0a") has finished
+	let introVectorRevealed = false;
+	$: if (introVectorRevealed) {
+		const angleRad = ($introVectorAngleDeg * Math.PI) / 180;
+		vectorCoords[3] = $introVectorLength * Math.cos(angleRad);
+		vectorCoords[4] = $introVectorLength * Math.sin(angleRad);
+		vectorCoords = vectorCoords;
+	}
+
+	// Puts the example vector back to the canonical -i + 2j. Mutated in place:
+	// reassigning would detach the array from the tweens that own it.
+	function resetExampleVector() {
+		vectorCoords[0] = 0;
+		vectorCoords[1] = 0;
+		vectorCoords[2] = 0;
+		vectorCoords[3] = egVector[0];
+		vectorCoords[4] = egVector[1];
+		vectorCoords[5] = 0;
+		vectorCoords = vectorCoords;
+	}
+
+	// Fixed vector, scaled live by the scalar scrubber (trigger "#st-0b")
+	let scalarVectorCoords = [0, 0, 0, 0, 0, 0];
+	let scalarVectorRevealed = false;
+	$: if (scalarVectorRevealed) {
+		scalarVectorCoords[3] = $scalarDemoValue * scalarDemoVector[0];
+		scalarVectorCoords[4] = $scalarDemoValue * scalarDemoVector[1];
+		scalarVectorCoords = scalarVectorCoords;
+	}
+
+	// Vector addition demo (head-to-tail), triggers "#st-0c" / "#st-0d" / "#st-0e"
+	let addVectorACoords = [0, 0, 0, 0, 0, 0];
+	let addVectorBCoords = [0, 0, 0, 0, 0, 0];
+	let addSumCoords = [0, 0, 0, 0, 0, 0];
+	let addProps = {
+		aOpacity: 0,
+		bOpacity: 0,
+		sumOpacity: 0,
+		// Coordinate columns, shown only while a and b both start at the origin.
+		// Once b slides head-to-tail they collide with the joint, so they fade.
+		aTex: 0,
+		bTex: 0
+	};
+
+	// Retracts a demo's vectors back to the origin once its section is over.
+	// This is a separate tween target on purpose: the coords arrays above are
+	// owned by scroll-scrubbed timelines, so anything that tweens or kills them
+	// directly would fight (or permanently detach) those timelines.
+	let demoFade = {
+		intro: 1,
+		scalar: 1,
+		add: 1,
+		det: 1,
+		det3d: 1,
+		// The two vectors that collapse onto one point under a singular matrix
+		singular: 0,
+		// Owned by the 3D playground alone, so it never fights st-12's clear
+		det3dPlay: 0
+	};
+
+	function retract(coords, f) {
+		return coords.map((c) => c * f);
+	}
+
+	// Determinant section: reveal factors for the shaded unit regions
+	let detProps = {
+		square: 0,
+		para: 0,
+		cube: 0,
+		box: 0
+	};
+
+	// The negative/zero/restore beats each own a separate scalar. Three scrubbed
+	// timelines cannot share one target: while inactive each asserts its own
+	// start value, and whichever renders last wins.
+	let detMorph = { neg: 0, zero: 0, back: 0 };
+	let detMorphActive = false;
+
+	function lerpArr(a, b, t) {
+		return a.map((v, i) => v + (b[i] - v) * t);
+	}
+
+	$: detMorphMatrix = lerpArr(
+		lerpArr(
+			lerpArr(egEndMatrix, negDetEndMatrix, detMorph.neg),
+			zeroDetEndMatrix,
+			detMorph.zero
+		),
+		egEndMatrix,
+		detMorph.back
+	);
+
+	// Only ever drives the 2D determinant beats — never leaks into 3D.
+	// Everything here is mutated in place: reassigning these arrays would
+	// detach them from the gsap tweens that own them elsewhere.
+	// Inverse section: identity -> A -> (times A inverse) back to identity ->
+	// a singular matrix. One scalar per beat, same reason as detMorph.
+	let invMorph = { a: 0, back: 0, singular: 0 };
+	let invMorphActive = false;
+
+	$: invMorphMatrix = lerpArr(
+		lerpArr(
+			lerpArr(initMatrix, egEndMatrix, invMorph.a),
+			initMatrix,
+			invMorph.back
+		),
+		zeroDetEndMatrix,
+		invMorph.singular
+	);
+
+	// Applied here rather than by parenting to transformedView: the HTML
+	// labels are positioned from the raw coords and would not follow the
+	// view's matrix, so they'd sit at the untransformed spot.
+	function applyMatrix2d(m, v) {
+		return [m[0] * v[0] + m[1] * v[1], m[4] * v[0] + m[5] * v[1]];
+	}
+
+	$: singularPRender = [0, 0, 0, ...applyMatrix2d(invMorphMatrix, singularP), 0];
+	$: singularQRender = [0, 0, 0, ...applyMatrix2d(invMorphMatrix, singularQ), 0];
+
+	$: if (invMorphActive && !$show3d) {
+		invMorphMatrix.forEach((v, i) => {
+			$endMatrix[i] = v;
+		});
+		$endMatrix = $endMatrix;
+
+		xCoords[3] = invMorphMatrix[0];
+		xCoords[4] = invMorphMatrix[4];
+		xCoords = xCoords;
+
+		yCoords[3] = invMorphMatrix[1];
+		yCoords[4] = invMorphMatrix[5];
+		yCoords = yCoords;
+	}
+
+	$: if (detMorphActive && !$show3d) {
+		detMorphMatrix.forEach((v, i) => {
+			$endMatrix[i] = v;
+		});
+		$endMatrix = $endMatrix;
+
+		xCoords[3] = detMorphMatrix[0];
+		xCoords[4] = detMorphMatrix[4];
+		xCoords = xCoords;
+
+		yCoords[3] = detMorphMatrix[1];
+		yCoords[4] = detMorphMatrix[5];
+		yCoords = yCoords;
+	}
+
+	// Determinant of the transformation actually on screen, so the shaded
+	// region can flag the moment space collapses — during the worked example
+	// and equally while the reader is dragging the matrix in the playground.
+	const degenerateEpsilon = 0.08;
+
+	$: liveDet2d =
+		$matrixTransform[0] * $matrixTransform[5] -
+		$matrixTransform[1] * $matrixTransform[4];
+
+	$: liveDet3d =
+		$matrixTransform[0] *
+			($matrixTransform[5] * $matrixTransform[10] -
+				$matrixTransform[6] * $matrixTransform[9]) -
+		$matrixTransform[1] *
+			($matrixTransform[4] * $matrixTransform[10] -
+				$matrixTransform[6] * $matrixTransform[8]) +
+		$matrixTransform[2] *
+			($matrixTransform[4] * $matrixTransform[9] -
+				$matrixTransform[5] * $matrixTransform[8]);
+
+	// The narrative clears the cube before the cat; the playground brings it
+	// back. Separate scalars, so neither timeline overwrites the other.
+	$: cubeFade = Math.max(demoFade.det3d, demoFade.det3dPlay);
+
+	$: areaColor =
+		Math.abs(liveDet2d) < degenerateEpsilon ? colorAreaZero : colorAreaNew;
+	$: volumeColor =
+		Math.abs(liveDet3d) < degenerateEpsilon ? colorAreaZero : colorAreaNew;
+
+	$: introVectorRender = retract(vectorCoords, demoFade.intro);
+	$: scalarVectorRender = retract(scalarVectorCoords, demoFade.scalar);
+	$: addVectorARender = retract(addVectorACoords, demoFade.add);
+	$: addVectorBRender = retract(addVectorBCoords, demoFade.add);
+	$: addSumRender = retract(addSumCoords, demoFade.add);
+
 	const vectorCoordsSpring = spring([0, 0, 0]);
 	$: $vectorCoordsSpring = $vectorCoordsInput;
 
@@ -499,6 +707,7 @@
 	// TODO: Separate this?
 	let props = {
 		vectorTexOpacity: 0,
+		scalarLabelOpacity: 0,
 		xTexOpacity: 0,
 		yTexOpacity: 0,
 		zTexOpacity: 0,
@@ -616,22 +825,36 @@
 				...timelineProps,
 				scrollTrigger: {
 					...stProps,
-					trigger: "#st-1",
-					end: `+=${scrollUnit * 1}`
-					// onEnter: () => {
-					// 	stProps.onEnter();
+					trigger: "#st-0a",
+					end: `+=${scrollUnit * 1}`,
+					onLeave: () => {
+						stProps.onLeave();
 
-					// 	($gridToggled = true), ($transformedGridToggled = false);
+						// Hand control of the vector over to the direction/length scrubbers
+						introVectorRevealed = true;
+					},
+					onLeaveBack: () => {
+						stProps.onLeaveBack();
 
-					// 	// $rgbShiftEnabled = false;
-					// },
-					// onLeaveBack: () => {
-					// 	stProps.onLeaveBack();
+						// Back at the top of the vector narrative. The coords and
+						// opacities are owned by scrubbed timelines, which rewind
+						// themselves — so only the non-scroll state is reset here.
+						introVectorRevealed = false;
+						scalarVectorRevealed = false;
 
-					// 	($gridToggled = false), ($transformedGridToggled = true);
+						gsap.killTweensOf(demoFade);
+						demoFade.intro = 1;
+						demoFade.scalar = 1;
+						demoFade.add = 1;
+						demoFade.det = 1;
+						demoFade = demoFade;
 
-					// 	// $rgbShiftEnabled = true;
-					// }
+						$introVectorAngleDeg =
+							((Math.atan2(egVector[1], egVector[0]) * 180) / Math.PI + 360) %
+							360;
+						$introVectorLength = Math.hypot(egVector[0], egVector[1]);
+						$scalarDemoValue = 1;
+					}
 				}
 			})
 			.to(vectorCoords, {
@@ -646,6 +869,271 @@
 					props = props;
 				}
 			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// Animate in scalar-scrubber vector
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-0b",
+					end: `+=${scrollUnit * 1}`,
+					onEnter: () => {
+						stProps.onEnter();
+
+						// The first "try it" is done — retract that vector
+						introVectorRevealed = false;
+						gsap.to(demoFade, {
+							intro: 0,
+							duration,
+							onUpdate: () => {
+								demoFade = demoFade;
+							}
+						});
+					},
+					onLeave: () => {
+						stProps.onLeave();
+
+						// Hand control of the vector over to the scalar scrubber
+						scalarVectorRevealed = true;
+					},
+					onLeaveBack: () => {
+						stProps.onLeaveBack();
+
+						scalarVectorRevealed = false;
+						$scalarDemoValue = 1;
+
+						// Bring the first vector back as we re-enter its section
+						introVectorRevealed = true;
+						gsap.to(demoFade, {
+							intro: 1,
+							duration,
+							onUpdate: () => {
+								demoFade = demoFade;
+							}
+						});
+					}
+				}
+			})
+			.to(scalarVectorCoords, {
+				endArray: [0, 0, 0, ...scalarDemoVector, 0],
+				onUpdate: function () {
+					scalarVectorCoords = scalarVectorCoords;
+				}
+			})
+			.to(props, {
+				scalarLabelOpacity: 1,
+				onUpdate: function () {
+					props = props;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// Clear the scalar-scrubber vector, animate in the two vectors to add
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-0c",
+					end: `+=${scrollUnit * 1}`,
+					onEnter: () => {
+						stProps.onEnter();
+
+						// The second "try it" is done — retract that vector
+						scalarVectorRevealed = false;
+						gsap.to(demoFade, {
+							scalar: 0,
+							duration,
+							onUpdate: () => {
+								demoFade = demoFade;
+							}
+						});
+					},
+					onLeaveBack: () => {
+						stProps.onLeaveBack();
+
+						scalarVectorRevealed = true;
+						gsap.to(demoFade, {
+							scalar: 1,
+							duration,
+							onUpdate: () => {
+								demoFade = demoFade;
+							}
+						});
+					}
+				}
+			})
+			.add("step-1")
+			.to(
+				addVectorACoords,
+				{
+					endArray: [0, 0, 0, ...addVectorA, 0],
+					onUpdate: function () {
+						addVectorACoords = addVectorACoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				addVectorBCoords,
+				{
+					endArray: [0, 0, 0, ...addVectorB, 0],
+					onUpdate: function () {
+						addVectorBCoords = addVectorBCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				addProps,
+				{
+					aOpacity: 1,
+					bOpacity: 1,
+					aTex: 1,
+					bTex: 1,
+					onUpdate: function () {
+						addProps = addProps;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// Slide vector b's tail to vector a's tip (head-to-tail)
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-0d",
+					end: `+=${scrollUnit * 1}`
+				}
+			})
+			.add("step-1")
+			.to(
+				addVectorBCoords,
+				{
+					endArray: [addVectorA[0], addVectorA[1], 0, ...addVectorSum, 0],
+					onUpdate: function () {
+						addVectorBCoords = addVectorBCoords;
+					}
+				},
+				"step-1"
+			)
+			// Their coordinate columns would sit right on the joint — drop them
+			.to(
+				addProps,
+				{
+					aTex: 0,
+					bTex: 0,
+					onUpdate: function () {
+						addProps = addProps;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// Animate in the sum vector
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-0e",
+					end: `+=${scrollUnit * 1}`
+				}
+			})
+			.to(addSumCoords, {
+				endArray: [0, 0, 0, ...addVectorSum, 0],
+				onUpdate: function () {
+					addSumCoords = addSumCoords;
+				}
+			})
+			.to(addProps, {
+				sumOpacity: 1,
+				onUpdate: function () {
+					addProps = addProps;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// Addition demo is done — retract it and introduce the vector v that
+		// carries the rest of the narrative. Scrubbed, so it reverses on scroll.
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-1",
+					end: `+=${scrollUnit * 1}`,
+					onEnter: () => {
+						stProps.onEnter();
+
+						// The scrubbers left this vector wherever the reader dragged
+						// it. The text here promises a fresh v = -i + 2j, so put it
+						// back. Safe to snap: it is still retracted at this point.
+						resetExampleVector();
+					},
+					onEnterBack: () => {
+						stProps.onEnterBack();
+
+						resetExampleVector();
+					}
+				}
+			})
+			.add("step-1")
+			.fromTo(
+				demoFade,
+				{ add: 1 },
+				{
+					add: 0,
+					immediateRender: false,
+					onUpdate: function () {
+						demoFade = demoFade;
+					}
+				},
+				"step-1"
+			)
+			.fromTo(
+				demoFade,
+				{ intro: 0 },
+				{
+					intro: 1,
+					immediateRender: false,
+					onUpdate: function () {
+						demoFade = demoFade;
+					}
+				},
+				"step-1+=0.3"
+			)
 			.to(
 				{},
 				{
@@ -1325,6 +1813,303 @@
 				}
 			);
 
+		// --- Determinant ---
+
+		// 1. Back to an untransformed grid, with just the basis vectors
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-det-1",
+					end: `+=${scrollUnit * 1}`,
+					onEnter: () => {
+						stProps.onEnter();
+
+						$dataToggled = undefined;
+						$transformedGridToggled = false;
+					},
+					onLeaveBack: () => {
+						stProps.onLeaveBack();
+
+						$dataToggled = "points";
+						$transformedGridToggled = true;
+					}
+				}
+			})
+			.add("step-1")
+			// Retract v — this section is about areas, not a single vector
+			.fromTo(
+				demoFade,
+				{ intro: 1 },
+				{
+					intro: 0,
+					immediateRender: false,
+					onUpdate: function () {
+						demoFade = demoFade;
+					}
+				},
+				"step-1"
+			)
+			// Rewind the transformation
+			.fromTo(
+				$matrixTween,
+				{ progress: 1 },
+				{
+					progress: 0,
+					immediateRender: false
+				},
+				"step-1"
+			)
+			.to(
+				xCoords,
+				{
+					endArray: [0, 0, 0, 1, 0, 0],
+					onUpdate: function () {
+						xCoords = xCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				yCoords,
+				{
+					endArray: [0, 0, 0, 0, 1, 0],
+					onUpdate: function () {
+						yCoords = yCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 2. Apply the transformation again, same treatment as before
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-det-2",
+					end: `+=${scrollUnit * 1}`,
+					onEnter: () => {
+						stProps.onEnter();
+
+						$transformedGridToggled = true;
+						$dataToggled = undefined;
+					},
+					onLeaveBack: () => {
+						stProps.onLeaveBack();
+
+						$transformedGridToggled = false;
+					}
+				}
+			})
+			.add("step-1")
+			.fromTo(
+				$matrixTween,
+				{ progress: 0 },
+				{
+					progress: 1,
+					immediateRender: false
+				},
+				"step-1"
+			)
+			.to(
+				xCoords,
+				{
+					endArray: [0, 0, 0, ...egMatrixX, 0],
+					onUpdate: function () {
+						xCoords = xCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				yCoords,
+				{
+					endArray: [0, 0, 0, ...egMatrixY, 0],
+					onUpdate: function () {
+						yCoords = yCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 3. Shade the transformed unit parallelogram (the "after" area)
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-det-3",
+					end: `+=${scrollUnit * 1}`,
+					onToggle: () => {
+						$dataToggled = undefined;
+					}
+				}
+			})
+			.to(detProps, {
+				para: 1,
+				onUpdate: function () {
+					detProps = detProps;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 4. Shade the original unit square (the "before" area)
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-det-4",
+					end: `+=${scrollUnit * 1}`,
+					onEnterBack: () => {
+						stProps.onEnterBack();
+
+						// Coming back up from the playground, which restores the
+						// sample points — the area demo wants a clean grid
+						$dataToggled = undefined;
+					}
+				}
+			})
+			.to(detProps, {
+				square: 1,
+				onUpdate: function () {
+					detProps = detProps;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 5. A negative determinant: space gets flipped over
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-det-5",
+					end: `+=${scrollUnit * 1}`,
+					onEnter: () => {
+						stProps.onEnter();
+
+						detMorphActive = true;
+						$dataToggled = undefined;
+					},
+					onLeaveBack: () => {
+						stProps.onLeaveBack();
+
+						detMorphActive = false;
+					}
+				}
+			})
+			.to(detMorph, {
+				neg: 1,
+				onUpdate: function () {
+					detMorph = detMorph;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 6. A zero determinant: space collapses onto a line
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-det-6",
+					end: `+=${scrollUnit * 1}`,
+					onToggle: () => {
+						$dataToggled = undefined;
+					}
+				}
+			})
+			.to(detMorph, {
+				zero: 1,
+				onUpdate: function () {
+					detMorph = detMorph;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 7. Back to the original matrix before the recap and the playground
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-det-7",
+					end: `+=${scrollUnit * 1}`,
+					onLeave: () => {
+						stProps.onLeave();
+
+						// Hand the matrix back for the recap and the playground,
+						// snapping to exact values the scrub may not have reached
+						detMorphActive = false;
+
+						egEndMatrix.forEach((v, i) => {
+							$endMatrix[i] = v;
+						});
+						$endMatrix = $endMatrix;
+
+						xCoords[3] = egMatrixX[0];
+						xCoords[4] = egMatrixX[1];
+						xCoords = xCoords;
+
+						yCoords[3] = egMatrixY[0];
+						yCoords[4] = egMatrixY[1];
+						yCoords = yCoords;
+					},
+					onEnterBack: () => {
+						stProps.onEnterBack();
+
+						detMorphActive = true;
+					}
+				}
+			})
+			.to(detMorph, {
+				back: 1,
+				onUpdate: function () {
+					detMorph = detMorph;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
 		// Let users do some input!
 		gsap
 			.timeline({
@@ -1595,6 +2380,168 @@
 				"step-2"
 			);
 
+		// --- Inverse ---
+
+		// 1. Take the matrix back from the playground and reset to a plain grid
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-inv-1",
+					end: `+=${scrollUnit * 1}`,
+					onEnter: () => {
+						stProps.onEnter();
+
+						// The try-it is over: close the playground before taking
+						// the matrix back, or this fights the reader's own edits
+						$showPlayground = false;
+						gsap.to("#inputs", { autoAlpha: 0, x: -40, duration });
+						gsap.to("#canvas-wrapper", { pointerEvents: "none", duration });
+
+						invMorphActive = true;
+						$dataToggled = undefined;
+						$transformedGridToggled = true;
+					},
+					onEnterBack: () => {
+						stProps.onEnterBack();
+
+						invMorphActive = true;
+					},
+					onLeaveBack: () => {
+						stProps.onLeaveBack();
+
+						invMorphActive = false;
+
+						// Hand it back to the playground
+						$showPlayground = true;
+						gsap.to("#inputs", { autoAlpha: 1, x: 0, duration });
+						gsap.to("#canvas-wrapper", { pointerEvents: "auto", duration });
+					}
+				}
+			})
+			.to(detProps, {
+				square: 1,
+				para: 1,
+				onUpdate: function () {
+					detProps = detProps;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 2. Apply A — the unit square becomes the parallelogram again
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-inv-2",
+					end: `+=${scrollUnit * 1}`
+				}
+			})
+			.to(invMorph, {
+				a: 1,
+				onUpdate: function () {
+					invMorph = invMorph;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 3. Apply the inverse on top — everything returns to where it started
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-inv-3",
+					end: `+=${scrollUnit * 1}`
+				}
+			})
+			.to(invMorph, {
+				back: 1,
+				onUpdate: function () {
+					invMorph = invMorph;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 4. Two distinct vectors, still distinct
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-inv-4",
+					end: `+=${scrollUnit * 1}`,
+					onEnter: () => {
+						stProps.onEnter();
+
+						// Four arrows end up on the collapse line otherwise, and
+						// the point is about p and q specifically
+						props.xVisible = false;
+						props.yVisible = false;
+						props = props;
+					},
+					onLeaveBack: () => {
+						stProps.onLeaveBack();
+
+						props.xVisible = true;
+						props.yVisible = true;
+						props = props;
+					}
+				}
+			})
+			.to(demoFade, {
+				singular: 1,
+				onUpdate: function () {
+					demoFade = demoFade;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// 5. A singular matrix lands them both on the same point
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-inv-5",
+					end: `+=${scrollUnit * 1}`
+				}
+			})
+			.to(invMorph, {
+				singular: 1,
+				onUpdate: function () {
+					invMorph = invMorph;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
 		// Show third dimension
 		gsap
 			.timeline({
@@ -1605,6 +2552,23 @@
 					end: `+=${scrollUnit * 3}`,
 					onEnter: () => {
 						stProps.onEnter();
+
+						detMorphActive = false;
+						invMorphActive = false;
+
+						// Restore what the singular demo switched off
+						props.xVisible = true;
+						props.yVisible = true;
+						props = props;
+
+						// The collapsing pair is a 2D argument
+						gsap.to(demoFade, {
+							singular: 0,
+							duration,
+							onUpdate: () => {
+								demoFade = demoFade;
+							}
+						});
 
 						$show3d = true;
             $show2d = false
@@ -1621,6 +2585,15 @@
 
 						basisAltProps.vectorVisible = false;
 
+						// The shaded unit areas are a 2D-only idea
+						gsap.to(demoFade, {
+							det: 0,
+							duration,
+							onUpdate: () => {
+								demoFade = demoFade;
+							}
+						});
+
 						// $inputVectorToggled = true;
 
 						// $vectorCoordsInput[0] = eg3dVector[0];
@@ -1629,6 +2602,14 @@
 					},
 					onLeaveBack: () => {
 						stProps.onLeaveBack();
+
+						gsap.to(demoFade, {
+							det: 1,
+							duration,
+							onUpdate: () => {
+								demoFade = demoFade;
+							}
+						});
 
 						$show3d = false;
             $show2d = true
@@ -2007,6 +2988,127 @@
 		// 	)
 		// 	.to({}, { duration: delay });
 
+		// Determinant in 3D: rewind to the unit cube
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-det3d-1",
+					end: `+=${scrollUnit * 1}`,
+					onToggle: () => {
+						$dataToggled = undefined;
+					}
+				}
+			})
+			.add("step-1")
+			.fromTo(
+				$matrixTween,
+				{ progress: 1 },
+				{ progress: 0, immediateRender: false },
+				"step-1"
+			)
+			.to(
+				xCoords,
+				{
+					endArray: [0, 0, 0, 1, 0, 0],
+					onUpdate: function () {
+						xCoords = xCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				yCoords,
+				{
+					endArray: [0, 0, 0, 0, 1, 0],
+					onUpdate: function () {
+						yCoords = yCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				zCoords,
+				{
+					endArray: [0, 0, 0, 0, 0, 1],
+					onUpdate: function () {
+						zCoords = zCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(detProps, {
+				cube: 1,
+				box: 1,
+				onUpdate: function () {
+					detProps = detProps;
+				}
+			})
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
+		// ...then apply the transformation and watch the volume grow
+		gsap
+			.timeline({
+				...timelineProps,
+				scrollTrigger: {
+					...stProps,
+					trigger: "#st-det3d-2",
+					end: `+=${scrollUnit * 1}`,
+					onToggle: () => {
+						$dataToggled = undefined;
+					}
+				}
+			})
+			.add("step-1")
+			.fromTo(
+				$matrixTween,
+				{ progress: 0 },
+				{ progress: 1, immediateRender: false },
+				"step-1"
+			)
+			.to(
+				xCoords,
+				{
+					endArray: [0, 0, 0, ...eg3dMatrixX],
+					onUpdate: function () {
+						xCoords = xCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				yCoords,
+				{
+					endArray: [0, 0, 0, ...eg3dMatrixY],
+					onUpdate: function () {
+						yCoords = yCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				zCoords,
+				{
+					endArray: [0, 0, 0, ...eg3dMatrixZ],
+					onUpdate: function () {
+						zCoords = zCoords;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				{},
+				{
+					duration: delay
+				}
+			);
+
 		// Maxwell the carryable cat
 		gsap
 			.timeline({
@@ -2029,12 +3131,31 @@
 					}
 				}
 			})
-			.to(modelProps, {
-				scale: 0.25,
-				onUpdate: function () {
-					modelProps = modelProps;
-				}
-			})
+			.add("step-1")
+			// Clear the shaded volume before the cat takes over the scene. This
+			// needs its own scalar: a fromTo on detProps would assert its start
+			// value every time this timeline renders at progress 0, which is the
+			// whole way down the page before this beat is reached.
+			.to(
+				demoFade,
+				{
+					det3d: 0,
+					onUpdate: function () {
+						demoFade = demoFade;
+					}
+				},
+				"step-1"
+			)
+			.to(
+				modelProps,
+				{
+					scale: 0.25,
+					onUpdate: function () {
+						modelProps = modelProps;
+					}
+				},
+				"step-1"
+			)
 			.to(
 				{},
 				{
@@ -2056,11 +3177,47 @@
 
 						basisAltProps.vectorVisible = true;
 						props.vectorVisible = true;
+
+						// The cat sits on the origin and hides the cube. Start with
+						// it off; the toolbar toggle still brings it back.
+						$dataToggled = undefined;
+						gsap.to(modelProps, {
+							scale: 0,
+							duration,
+							onUpdate: () => {
+								modelProps = modelProps;
+							}
+						});
+
+						// Bring the shaded unit cube back so the reader can watch
+						// the volume — and the determinant — change as they edit
+						gsap.to(demoFade, {
+							det3dPlay: 1,
+							duration,
+							onUpdate: () => {
+								demoFade = demoFade;
+							}
+						});
 					},
 					onLeaveBack: () => {
 						$cameraAutoRotate = true;
 
 						$showPlayground = false;
+
+						gsap.to(demoFade, {
+							det3dPlay: 0,
+							duration,
+							onUpdate: () => {
+								demoFade = demoFade;
+							}
+						});
+						gsap.to(modelProps, {
+							scale: 0.25,
+							duration,
+							onUpdate: () => {
+								modelProps = modelProps;
+							}
+						});
 
 						// Reset
 						$dataToggled = "model";
@@ -2263,14 +3420,111 @@
 <!-- <Grid {view} {dim} opacity={0.2} {gridColor} {axisColor} />
 <Grid view={transformedView} {dim} {gridColor} {axisColor} /> -->
 
+<!-- Determinant: unit square before, unit parallelogram after -->
+<!-- Drawn in front: with this matrix the unit square sits inside the
+     parallelogram, so it needs to stay readable on top of it -->
+<UnitArea
+	{view}
+	color={colorAreaOld}
+	t={detProps.square * demoFade.det}
+	zBias={4}
+	outline
+/>
+<UnitArea
+	view={transformedView}
+	color={areaColor}
+	t={detProps.para * demoFade.det}
+	zBias={-3}
+	outline
+/>
+
+<!-- Determinant in 3D: unit cube before, parallelepiped after -->
+<UnitCube
+	{view}
+	color={colorAreaOld}
+	t={detProps.cube * cubeFade}
+	zBias={-2}
+/>
+<UnitCube
+	view={transformedView}
+	color={volumeColor}
+	t={detProps.box * cubeFade}
+	zBias={-3}
+	outline
+/>
+
 <!-- Example vector -->
 <Vector
 	{view}
-	coords={vectorCoords}
+	coords={introVectorRender}
 	color={colorVector}
-	texOpacity={props.vectorTexOpacity}
+	texOpacity={props.vectorTexOpacity * demoFade.intro}
 	visible={props.xVisible}
 	dim3={props.vectorDim3}
+	label={"\\vec{v}"}
+	labelOpacity={props.vectorTexOpacity * demoFade.intro}
+/>
+
+<!-- Fixed vector, scaled by the scalar scrubber -->
+<Vector
+	{view}
+	coords={scalarVectorRender}
+	color={colorVector}
+	texOpacity={0}
+	scalar={scalarVectorRevealed ? $scalarDemoValue : false}
+	scalarOpacity={demoFade.scalar}
+	scalarAlign="right"
+	label={"\\vec{u}"}
+	labelOpacity={props.scalarLabelOpacity * demoFade.scalar}
+/>
+
+<!-- Vector addition demo -->
+<Vector
+	{view}
+	coords={addVectorARender}
+	color={colorAddA}
+	texOpacity={addProps.aTex * demoFade.add}
+	label={"\\vec{a}"}
+	labelOpacity={addProps.aOpacity * demoFade.add}
+/>
+<Vector
+	{view}
+	coords={addVectorBRender}
+	color={colorAddB}
+	texOpacity={addProps.bTex * demoFade.add}
+	label={"\\vec{b}"}
+	labelOpacity={addProps.bOpacity * demoFade.add}
+/>
+<Vector
+	{view}
+	coords={addSumRender}
+	color={colorVector}
+	texOpacity={addProps.sumOpacity * demoFade.add}
+	label={"\\vec{a+b}"}
+	labelOpacity={addProps.sumOpacity * demoFade.add}
+	labelSide={-1}
+/>
+
+<!-- Two vectors a singular matrix sends to the same point. They ride the
+     transformed view, so the matrix collapses them onto each other for free -->
+<Vector
+	{view}
+	coords={singularPRender}
+	color={colorAddA}
+	tex={false}
+	label={"\\vec{p}"}
+	labelOpacity={demoFade.singular}
+	visible={demoFade.singular > 0.01}
+/>
+<Vector
+	{view}
+	coords={singularQRender}
+	color={colorAddB}
+	tex={false}
+	label={"\\vec{q}"}
+	labelOpacity={demoFade.singular}
+	labelSide={-1}
+	visible={demoFade.singular > 0.01}
 />
 
 <!-- Example vector that animates on input -->
@@ -2293,6 +3547,8 @@
 	scalarAlign={props.xScalarAlign}
 	visible={props.xVisible}
 	dim3={props.xDim3}
+	label={"\\hat{\\imath}"}
+	labelOpacity={props.xTexOpacity}
 />
 <Vector
 	{view}
@@ -2304,6 +3560,8 @@
 	scalarAlign={props.yScalarAlign}
 	visible={props.yVisible}
 	dim3={props.yDim3}
+	label={"\\hat{\\jmath}"}
+	labelOpacity={props.yTexOpacity}
 />
 <Vector
 	{view}
@@ -2315,6 +3573,8 @@
 	scalarAlign={props.zScalarAlign}
 	visible={props.zVisible}
 	dim3={props.zDim3}
+	label={"\\hat{k}"}
+	labelOpacity={props.zTexOpacity}
 />
 
 <!-- Basis vectors (that animate on input) -->

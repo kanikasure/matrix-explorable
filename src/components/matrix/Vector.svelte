@@ -16,6 +16,10 @@
 	export let scalarAlign = "center";
 	export let visible = true;
 	export let dim3 = false;
+	export let label = false;
+	export let labelOpacity = 1;
+	// Which side of the vector the name label sits on (+1 / -1)
+	export let labelSide = 1;
 
 	$: [x1, y1, z1, x2, y2, z2] = coords;
 
@@ -74,18 +78,35 @@
 	}
 
 	let ref;
+	let labelRef;
 
 	onMount(() => {
 		// HACK
 		if (ref) ref.parentElement.style.pointerEvents = "none";
+		if (labelRef) labelRef.parentElement.style.pointerEvents = "none";
 	});
+
+	// Name label (e.g. "\vec{v}"), offset perpendicular to the vector so it
+	// doesn't collide with the coordinate/scalar labels at the tip
+	const labelOffset = 0.45;
+	$: midX = (x1 + x2) / 2;
+	$: midY = (y1 + y2) / 2;
+	$: midZ = (z1 + z2) / 2;
+	$: labelAngle = Math.atan2(y2 - y1, x2 - x1);
+	$: labelPosition = dim3
+		? [midX, midY, midZ + labelOffset]
+		: [
+				midX + labelSide * labelOffset * Math.sin(labelAngle),
+				midY - labelSide * labelOffset * Math.cos(labelAngle),
+				midZ
+		  ];
 </script>
 
 {#if tex}
 	<VectorTex {coords} opacity={texOpacity} {dim3} />
 
 	<!-- Scalar label -->
-	{#if scalar}
+	{#if scalar !== false}
 		{@const position = dim3
 			? [x2 / 2, y2 / 2, z2 / 2]
 			: [x2 / 2 + dx, y2 / 2 + dy, z2 / 2]}
@@ -99,4 +120,18 @@
 			</span>
 		</HTML>
 	{/if}
+{/if}
+
+<!-- Name label, e.g. vector v with an arrow on top -->
+{#if label}
+	<HTML position={labelPosition} center>
+		<span
+			bind:this={labelRef}
+			class="text-2xl whitespace-nowrap bg-base-300/50 inline-block px-1"
+			style:opacity={labelOpacity}
+			style:color
+		>
+			{@html katex.renderToString(label)}
+		</span>
+	</HTML>
 {/if}

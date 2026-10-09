@@ -49,6 +49,19 @@ export const endMatrix = writable([
 
 export const vectorCoordsInput = spring([...egVector, 0]);
 
+// Intro vector direction/magnitude scrubber
+const egVectorAngleDeg =
+	(Math.atan2(egVector[1], egVector[0]) * 180) / Math.PI;
+export const introVectorAngleDeg = writable(
+	((egVectorAngleDeg % 360) + 360) % 360
+);
+export const introVectorLength = writable(
+	Math.hypot(egVector[0], egVector[1])
+);
+
+// Scalar multiplication scrubber (fixed vector, scaled by a signed number)
+export const scalarDemoValue = writable(1);
+
 // Separate matrix transformation states
 export const heroMatrix = writable([
 	1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1

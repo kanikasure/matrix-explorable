@@ -62,15 +62,26 @@
 		</div>
 
 		<div
-			class="relative md:absolute top-0 right-0 font-displayAlt text-2xl sm:text-3xl md:text-4xl"
+			class="relative md:absolute top-0 right-0 font-displayAlt text-right"
 		>
-			By <a
-				href="https://yizhe-ang.github.io/"
-				target="_blank"
-				rel="noopener noreferrer"
-				class="underline decoration-2 underline-offset-8 decoration-neutral text-secondary"
-				>Yi Zhe Ang</a
-			>
+			<div class="text-2xl sm:text-3xl md:text-4xl">
+				By <a
+					href="https://yizhe-ang.github.io/"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="underline decoration-2 underline-offset-8 decoration-neutral text-secondary"
+					>Yi Zhe Ang</a
+				>
+			</div>
+			<div class="text-lg sm:text-xl md:text-2xl mt-3 opacity-80">
+				Extended by <a
+					href="https://github.com/kanikasure"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="underline decoration-2 underline-offset-4 decoration-neutral text-info"
+					>Kanika</a
+				>
+			</div>
 		</div>
 
 		<div class="relative hidden lg:flex flex-col items-center gap-5 mt-5">

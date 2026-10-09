@@ -15,7 +15,17 @@ import {
 	eg3dMatrixX,
 	eg3dMatrixY,
 	eg3dMatrixZ,
-	eg3dOutputVector
+	eg3dOutputVector,
+	negDetMatrixX,
+	negDetMatrixY,
+	zeroDetMatrixX,
+	zeroDetMatrixY,
+	eg3dDet,
+	egDet,
+	egInvMatrixX,
+	egInvMatrixY,
+	singularP,
+	singularQ
 } from "$data/variables.js";
 
 const colorA = colors.cyan["400"];
@@ -246,6 +256,120 @@ ${egVectorTex} } & =${colorTex(
 & = ${outputVector}
 \end{aligned}
 `;
+
+// Determinant
+export const detFormula = String.raw`\det\left[\begin{array}{ll}
+a & b \\
+c & d
+\end{array}\right] = ad - bc`;
+
+const d1 = colorTex(egMatrixX[0], colorX);
+const d2 = colorTex(egMatrixX[1], colorX);
+const d3 = colorTex(egMatrixY[0], colorY);
+const d4 = colorTex(egMatrixY[1], colorY);
+
+export const detEg = String.raw`\begin{aligned}
+\det\left[\begin{array}{rr}
+${d1} & ${d3} \\
+${d2} & ${d4}
+\end{array}\right]
+& = (${d1})(${d4}) - (${d3})(${d2}) \\
+& = ${egMatrixX[0] * egMatrixY[1] - egMatrixY[0] * egMatrixX[1]}
+\end{aligned}`;
+
+export const detAsAreaRatio = String.raw`\det A = \frac{\text{area after}}{\text{area before}}`;
+
+function det2x2Tex(mx, my) {
+	const a = colorTex(mx[0], colorX);
+	const c = colorTex(mx[1], colorX);
+	const b = colorTex(my[0], colorY);
+	const d = colorTex(my[1], colorY);
+	const value = mx[0] * my[1] - my[0] * mx[1];
+
+	return String.raw`\det\left[\begin{array}{rr}
+${a} & ${b} \\
+${c} & ${d}
+\end{array}\right] = (${a})(${d}) - (${b})(${c}) = ${value}`;
+}
+
+export const detNegEg = det2x2Tex(negDetMatrixX, negDetMatrixY);
+export const detZeroEg = det2x2Tex(zeroDetMatrixX, zeroDetMatrixY);
+
+const e1 = colorTex(eg3dMatrixX[0], colorX);
+const e2 = colorTex(eg3dMatrixX[1], colorX);
+const e3 = colorTex(eg3dMatrixX[2], colorX);
+const e4 = colorTex(eg3dMatrixY[0], colorY);
+const e5 = colorTex(eg3dMatrixY[1], colorY);
+const e6 = colorTex(eg3dMatrixY[2], colorY);
+const e7 = colorTex(eg3dMatrixZ[0], colorZ);
+const e8 = colorTex(eg3dMatrixZ[1], colorZ);
+const e9 = colorTex(eg3dMatrixZ[2], colorZ);
+
+export const det3dAsVolumeRatio = String.raw`\det A = \frac{\text{volume after}}{\text{volume before}}`;
+
+// --- Inverse ---
+
+export const inverseFormula = String.raw`A^{-1} = \frac{1}{\det A}\left[\begin{array}{rr}
+d & -b \\
+-c & a
+\end{array}\right]`;
+
+function fmt(n) {
+	return Number(n.toFixed(2)).toString();
+}
+
+const ia = colorTex(egMatrixX[0], colorX);
+const id = colorTex(egMatrixY[1], colorY);
+
+// Negate the values rather than prefixing a minus, so a zero entry doesn't
+// come out as "-0"
+const inb = colorTex(-egMatrixY[0], colorY);
+const inc = colorTex(-egMatrixX[1], colorX);
+
+export const inverseEg = String.raw`A^{-1} = \frac{1}{${egDet}}\left[\begin{array}{rr}
+${id} & ${inb} \\
+${inc} & ${ia}
+\end{array}\right] = \left[\begin{array}{rr}
+${fmt(egInvMatrixX[0])} & ${fmt(egInvMatrixY[0])} \\
+${fmt(egInvMatrixX[1])} & ${fmt(egInvMatrixY[1])}
+\end{array}\right]`;
+
+export const inverseUndoes = String.raw`A^{-1}A = \left[\begin{array}{rr}
+1 & 0 \\
+0 & 1
+\end{array}\right]`;
+
+const sp = colorTex(
+	String.raw`\left[\begin{array}{r} ${singularP[0]} \\ ${singularP[1]} \end{array}\right]`,
+	colors.red["400"]
+);
+const sq = colorTex(
+	String.raw`\left[\begin{array}{r} ${singularQ[0]} \\ ${singularQ[1]} \end{array}\right]`,
+	colors.green["400"]
+);
+const sOut = String.raw`\left[\begin{array}{r} 1 \\ 2 \end{array}\right]`;
+const sMat = String.raw`\left[\begin{array}{rr}
+${colorTex(zeroDetMatrixX[0], colorX)} & ${colorTex(zeroDetMatrixY[0], colorY)} \\
+${colorTex(zeroDetMatrixX[1], colorX)} & ${colorTex(zeroDetMatrixY[1], colorY)}
+\end{array}\right]`;
+
+export const singularCollapseEg = String.raw`\begin{aligned}
+${sMat}${sp} & = ${sOut} \\
+${sMat}${sq} & = ${sOut}
+\end{aligned}`;
+
+export const det3dEg = String.raw`\det\left[\begin{array}{rrr}
+${e1} & ${e4} & ${e7} \\
+${e2} & ${e5} & ${e8} \\
+${e3} & ${e6} & ${e9}
+\end{array}\right] = ${eg3dDet}`;
+
+export const detAreaEg = String.raw`\det A = \frac{${colorTex(
+	egMatrixX[0] * egMatrixY[1] - egMatrixY[0] * egMatrixX[1],
+	colorVector
+)}}{${colorTex(1, colors.yellow["300"])}} = ${
+	egMatrixX[0] * egMatrixY[1] - egMatrixY[0] * egMatrixX[1]
+}`;
 
 const c1 = colorTex(eg3dMatrixX[0], colorX);
 const c2 = colorTex(eg3dMatrixX[1], colorX);
